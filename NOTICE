@@ -1,0 +1,32 @@
+TinkrkniT
+Copyright (c) 2026 Dekoboko Studio. Released under the MIT License (LICENSE).
+
+The TinkrkniT name and logo are not covered by the MIT License. You may use
+the code under its terms, but please give a modified version its own name and
+logo so it is not mistaken for TinkrkniT.
+
+This software includes or is based on the following work.
+
+silver-reed-write
+  https://github.com/knitscape/silver-reed-write
+  The Silver Reed controller protocol and the knitting loop in
+  public/js/knit/ (protocol.js, drivers/silverReed.js, parts of job.js and
+  screen.js) are ported from silver-reed-write by knitscape, with the
+  author's permission to release them under the MIT License.
+
+Material Design Icons
+  https://pictogrammers.com/library/mdi/
+  Copyright (c) Pictogrammers. The icon path data in public/js/icons.js is
+  from Material Design Icons, licensed under the Apache License 2.0; a copy is
+  in LICENSES/Apache-2.0.txt.
+
+AYAB
+  https://ayab-knitting.com
+  public/js/knit/ayabProtocol.js and drivers/ayab.js implement the published
+  AYAB serial API (version 6). They are written from the specification and
+  contain no AYAB code. AYAB is a trademark of its developers; TinkrkniT is
+  not affiliated with or endorsed by the AYAB project.
+
+Knitting machine names (Silver Reed, Knitmaster, Brother and model numbers)
+are used only to say which machines the software is meant to work with. They
+are trademarks of their owners, who do not make, support or endorse TinkrkniT.
