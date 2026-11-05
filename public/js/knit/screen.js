@@ -31,7 +31,7 @@ import {
 import { h, append, clear, toast, select, checkbox, numberInput, button } from '../ui/dom.js';
 import { svgPath } from '../ui/panels/helpers.js';
 import { mdiArrowLeft } from '../icons.js';
-import { getTechnique, getBacking, backingList } from '../model/technique.js';
+import { getTechnique, BACKING_HINT } from '../model/technique.js';
 import { DEFAULT_MACHINE, getMachine, knitMachines } from '../model/machine.js';
 
 const LOG_LINES = 120;
@@ -98,7 +98,7 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
 
   function freshSession(forJob, saved) {
     if (!forJob) return null;
-    const defaults = { passIndex: 0, finished: false, passes: 0, markersSet: false, swapFeeders: false, invertSelect: false, mirror: false, repeat: false, scope: 'panel', backing: null, sound: true, machine: DEFAULT_MACHINE, yarnLetters: null, yarnColors: {}, yarnFor: null };
+    const defaults = { passIndex: 0, finished: false, passes: 0, markersSet: false, swapFeeders: false, invertSelect: false, mirror: false, repeat: false, scope: 'panel', sound: true, machine: DEFAULT_MACHINE, yarnLetters: null, yarnColors: {}, yarnFor: null };
     if (saved && saved.jobId === forJob.id) {
       // Sessions saved before the pass plan counted rows; those jobs were
       // Fair Isle, one pass per row, so the row was the pass.
@@ -130,8 +130,6 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
       ...(saved?.yarnFor && saved.yarnFor === paletteKey(forJob)
         ? { yarnLetters: saved.yarnLetters, yarnColors: saved.yarnColors ?? {}, yarnFor: saved.yarnFor }
         : {}),
-      // `backing` is not carried: an override belonged to the old job, and a
-      // new design brings its own preference.
     };
   }
 
@@ -144,22 +142,21 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
   const setupOf = () => yarnSetup(job, session.yarnLetters, session.yarnColors);
   // Everything reads the grid in yarns, never in design colors. It is rebuilt
   // only when what it depends on changes: a render asks for it many times.
+  // A plan's `wrap` passes only carry the carriage and yarn back to pass 0
+  // (model/passes.js), so a panel that stops at its end leaves them out.
   let gridCache = null;
   const grid = (lay = session.layout) => {
-    const key = JSON.stringify([scopeOf(), lay, session.yarnLetters, session.yarnColors]);
+    const key = JSON.stringify([scopeOf(), lay, session.yarnLetters, session.yarnColors, repeating()]);
     if (gridCache?.job !== job || gridCache.key !== key) {
-      gridCache = { job, key, grid: withYarns(knitGrid(job, scopeOf(), lay), setupOf()) };
+      const g = knitGrid(job, scopeOf(), lay);
+      const passes = repeating() ? g.passes : g.passes.filter((p) => !p.wrap);
+      gridCache = { job, key, grid: withYarns({ ...g, passes }, setupOf()) };
     }
     return gridCache.grid;
   };
   // A tile knits as an all-over repeat; the panel stops at its last row unless asked.
   const repeating = () => scopeOf() === 'tile' || session.repeat;
-  const techniqueLabel = () => {
-    const technique = getTechnique(job.technique);
-    return technique.id === 'jacquard' ? `${technique.label}, ${backingOf().label.toLowerCase()} backing` : technique.label;
-  };
-  /** The backing to knit: this screen's override, else the design's. */
-  const backingOf = () => getBacking(session.backing ?? job.backing);
+  const techniqueLabel = () => getTechnique(job.technique).label;
 
   function setScope(scope) {
     if (scope === scopeOf() || patterning) return;
@@ -189,11 +186,10 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
   function offer(next) {
     if (!job) return loadNewJob(next);
     if (sameKnitting(job, next)) {
-      // Unchanged design: keep the place, but pick up a rename or a new
-      // preferred backing, neither of which changes a stitch.
-      if (job.name !== next.name || job.backing !== next.backing) {
+      // Unchanged design: keep the place, but pick up a rename, which
+      // changes no stitch.
+      if (job.name !== next.name) {
         job.name = next.name;
-        job.backing = next.backing;
         saveJob(job);
         render();
       }
@@ -251,7 +247,7 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
       case 'slip':
         return ['Slip (part) buttons in', 'Selected needles knit; the rest slip and the yarn floats behind them. Use Invert stitch selection if a swatch shows it the other way round.'];
       case 'jacquard':
-        return [`Main bed: slip buttons in. Ribber: ${backingOf().label}`, "The main bed knits this color's needles and slips the rest; the ribber knits the backing."];
+        return ['Main bed: slip buttons in. Ribber: your backing', `The main bed knits this color's needles and slips the rest; the ribber knits the back.\n\n${BACKING_HINT}`];
       default:
         return ['Every needle knits', 'A plain pass. Leave the buttons as they are: every needle is selected, so it knits whatever is set.'];
     }
@@ -358,7 +354,12 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
 
   function onPassComplete() {
     needleNow = 0;
-    if (!patterning) return;
+    // A free pass (moving the carriage to the changer, testing the cams)
+    // still crosses the point cams, so the side follows it; nothing is counted.
+    if (!patterning) {
+      update({ carriageSide: session.carriageSide === 'left' ? 'right' : 'left' });
+      return;
+    }
 
     const carriageSide = session.carriageSide === 'left' ? 'right' : 'left';
     const passes = session.passes + 1;
@@ -474,16 +475,6 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
       frameQueued = false;
       render();
     });
-  }
-
-  /** A feeder's yarn. The chip is the yarn's color picker. */
-  function swatch(yarn, label) {
-    return h(
-      'div',
-      { class: 'knit-yarn' },
-      colorPicker(grid().yarns.indexOf(yarn), 'knit-yarn-chip'),
-      h('span', { class: 'knit-yarn-text' }, h('small', {}, label), h('strong', {}, yarn.name))
-    );
   }
 
   /** A color input for yarn number `yarn`: what the cone really is, for the chart and cards. */
@@ -798,10 +789,13 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
       h(
         'section',
         { class: `knit-card ${change ? 'is-change' : ''}` },
-        change ? renderChanges(g, p, wrapped, changes, yarns) : null,
-        yarns.single
-          ? swatch(yarns.feeder1, yarns.cam === 'fairisle' ? 'Plain row - one yarn' : 'Feeder 1 - the only yarn')
-          : [swatch(yarns.feeder1, 'Feeder 1 - background'), swatch(yarns.feeder2, 'Feeder 2 - selected needles')],
+        change ? h('div', { class: 'knit-change' }, 'Change yarn') : null,
+        renderFeeders(changes, yarns),
+        change ? renderYarnAction(g, p, wrapped, changes, yarns) : null,
+        g.passes[p].travel
+          ? h('p', { class: 'knit-note', title: 'The main bed slips every needle and only the ribber knits, taking the yarn back to the color changer.' }, 'Travel pass: nothing on the front')
+          : null,
+        renderStartSide(g, p),
         yarns.cam === 'fairisle' ? null : camLine(g, p, wrapped),
         yarns.ribber && yarns.cam !== 'jacquard'
           ? h('p', { class: 'knit-note', title: 'The ribber knits every needle on every pass; set its carriage to plain knitting.' }, 'Ribber: knit every needle')
@@ -842,8 +836,11 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
    */
   function camLine(g, p, wrapped) {
     const [label, title] = camSetting(g.passes[p]);
-    const change = camChangeAt(g, p, wrapped);
-    return h('p', { class: `knit-note ${change ? 'is-warn' : ''}`.trim(), title }, change ? `Change the carriage: ${label}` : `Carriage: ${label}`);
+    // Only when there is something to do: the first pass, or a new setting.
+    // Otherwise it is in the tooltip on the yarn, not on screen every pass.
+    if (camChangeAt(g, p, wrapped)) return h('p', { class: 'knit-note is-warn', title }, `Set the carriage: ${label}`);
+    if (p === 0 && !wrapped && session.passes === 0 && g.passes[p].cam !== 'plain') return h('p', { class: 'knit-note', title }, `Carriage: ${label}`);
+    return null;
   }
 
   function camChangeAt(g, p, wrapped) {
@@ -861,34 +858,59 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
   const chip = (yarn) => h('span', { class: 'knit-chip', style: { background: yarn.hex }, title: yarn.name });
 
   /**
-   * The rethread before this pass: old and new yarn for each feeder that
-   * changes. On a one-yarn pass, also where the new yarn hangs and what
-   * becomes of the old one. Sides follow from the carriage side, so they are
-   * only as right as that is ("It's on the other side" fixes both).
+   * What is in each feeder for this pass, one line per feeder: the yarn, or
+   * old -> new where it changes. The big chip is the yarn's color picker.
+   * The cam setting is the tooltip, so it is there without being read.
    */
-  function renderChanges(g, p, wrapped, changes, yarns) {
-    const here = session.carriageSide;
-    const out = [h('div', { class: 'knit-change' }, 'Change yarn before this pass')];
-    for (const c of changes) {
-      out.push(h('div', { class: 'knit-swap' },
-        yarns.single ? null : h('small', {}, `Feeder ${c.feeder}`),
-        c.from ? [chip(c.from), h('span', {}, c.from.name)] : h('small', {}, 'empty'),
-        h('span', { class: 'knit-swap-arrow' }, '→'),
-        chip(c.to), h('strong', {}, c.to.name)));
-    }
-    if (!yarns.single) return out;
+  function renderFeeders(changes, yarns) {
+    const [camLabel] = camSetting(grid().passes[session.passIndex]);
+    const feeders = yarns.single ? [yarns.feeder1] : [yarns.feeder1, yarns.feeder2];
+    const roles = ['Feeder 1 - background', 'Feeder 2 - selected needles'];
+    return feeders.map((yarn, i) => {
+      const c = changes.find((ch) => ch.feeder === i + 1);
+      return h('div', { class: `knit-feed ${c ? 'is-change' : ''}`.trim(), title: yarns.single ? `Carriage: ${camLabel}` : roles[i] },
+        yarns.single ? null : h('span', { class: 'knit-feed-num' }, String(i + 1)),
+        c ? [c.from ? chip(c.from) : h('small', {}, 'empty'), h('span', { class: 'knit-swap-arrow' }, '→')] : null,
+        colorPicker(grid().yarns.indexOf(yarn), 'knit-yarn-chip'),
+        h('strong', {}, yarn.name));
+    });
+  }
 
+  /**
+   * The one thing to do with the yarn ends, on a one-yarn pass: join the new
+   * yarn, or cut and rejoin it if it was left on the far side, and cut the
+   * old one if it is finished. Nothing when the new yarn is waiting here and
+   * the old one is parked - the common case with a color changer. Sides
+   * follow the carriage side ("It's on the other side" fixes both).
+   */
+  function renderYarnAction(g, p, wrapped, changes, yarns) {
+    if (!yarns.single) return null;
+    const here = session.carriageSide;
     const [c] = changes;
     const at = yarnSide(g, p, c.toIndex, here, wrapped);
-    if (at === null) out.push(h('p', { class: 'knit-note' }, `Join ${c.to.name} on the ${here}.`));
-    else if (at === here) out.push(h('p', { class: 'knit-note' }, `${c.to.name} is waiting on the ${here}.`));
-    else out.push(h('p', { class: 'knit-note is-warn' }, `${c.to.name} was left on the ${at}: cut it and rejoin on the ${here}.`));
-    if (c.from) {
-      out.push(h('p', { class: 'knit-note' }, yarnUsedAfter(g, p, c.fromIndex, repeating())
-        ? `Leave ${c.from.name} hanging on the ${here}.`
-        : `${c.from.name} is finished: cut it.`));
-    }
-    return out;
+    const steps = [];
+    if (at === null) steps.push(`Join ${c.to.name}`);
+    else if (at !== here) steps.push(`${c.to.name} is on the ${at}: cut and rejoin here`);
+    if (c.from && !yarnUsedAfter(g, p, c.fromIndex, repeating())) steps.push(`cut ${c.from.name}, it is finished`);
+    if (!steps.length) return null;
+    const text = steps.join(' · ');
+    return h('p', { class: `knit-note ${at !== null && at !== here ? 'is-warn' : ''}`.trim() }, text[0].toUpperCase() + text.slice(1));
+  }
+
+  /**
+   * Before the first jacquard pass: the side to start from so that every
+   * change comes with the carriage at the color changer, which is on the
+   * left on Silver Reed and Brother beds. The plan says which: a change before
+   * an odd pass needs a start on the right, before an even one on the left.
+   */
+  function renderStartSide(g, p) {
+    if (p !== 0 || session.passes !== 0 || g.passes[0].cam !== 'jacquard') return null;
+    const first = g.passes.findIndex((_, i) => i > 0 && yarnChanges(g, i, false, session.swapFeeders).length > 0);
+    if (first < 0) return null;
+    const start = first % 2 ? 'right' : 'left';
+    if (start === session.carriageSide) return null;
+    return h('p', { class: 'knit-note is-warn', title: 'Yarn changes then all come with the carriage at the color changer, on the left.' },
+      `Start with the carriage on the ${start}`);
   }
 
   /** The next rethread ahead, so the cone can be ready before the carriage is. */
@@ -896,9 +918,9 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
     if (session.finished) return null;
     const next = nextChange(g, p, repeating(), session.swapFeeders);
     if (!next) return null;
-    const when = next.ahead === 1 ? 'after this pass' : `after ${next.ahead} passes`;
+    const when = next.ahead === 1 ? 'next pass' : `in ${next.ahead} passes`;
     return h('div', { class: 'knit-then', title: `Before chart row ${g.passes[next.passIndex].row + 1}` },
-      h('small', {}, 'Next change'),
+      h('small', {}, 'Next'),
       ...next.changes.map((c) => h('span', { class: 'knit-then-yarn' }, chip(c.to), c.to.name)),
       h('small', { class: 'grow' }, when));
   }
@@ -1009,25 +1031,17 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
           title: scopeOf() === 'tile'
             ? 'A repeated tile always keeps going. Stop patterning when the piece is long enough.'
             : 'Keep knitting the panel over and over instead of stopping after the last row.',
-          onchange: (v) => update({ repeat: v }),
-        }),
-        getTechnique(job.technique).id === 'jacquard' ? backingOption() : null)
+          onchange: (v) => {
+            // Turned off on a closing pass: that pass is gone from the plan.
+            session.repeat = v;
+            const passIndex = Math.min(session.passIndex, grid().passes.length - 1);
+            const moved = passIndex !== session.passIndex;
+            update({ passIndex });
+            if (moved && patterning) sendCurrent();
+          },
+        }))
     );
     return details;
-  }
-
-  /** Starts on the design's backing; any other choice is this job's override. */
-  function backingOption() {
-    const design = getBacking(job.backing);
-    return h('label', { class: 'knit-inline', title: backingList().map((b) => `${b.label}: ${b.title}`).join('\n') }, 'Backing',
-      select({
-        value: session.backing ?? '',
-        options: [['', `From the design (${design.label})`], ...backingList().map((b) => [b.id, b.label])],
-        onchange: (v) => {
-          update({ backing: v || null });
-          addLog('info', `Backing: ${backingOf().label}${v ? '' : ' (from the design)'}.`);
-        },
-      }));
   }
 
   function renderLog() {

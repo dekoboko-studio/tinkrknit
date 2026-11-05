@@ -35,8 +35,9 @@ import {
   resizeTile, resizePanel, divisors, nearestDivisor, expandPanel,
 } from '../model/project.js';
 import { cmForStitches, cmForRows, estimateYarn, colorShares, stitchAspect } from '../model/gauge.js';
-import { h, row, field, numberInput, select, checkbox, button } from './dom.js';
-import { getTechnique, techniqueList, getBacking, backingList } from '../model/technique.js';
+import { h, row, field, numberInput, select, checkbox, button, toast } from './dom.js';
+import { renameOpenProject } from './projectStore.js';
+import { getTechnique, techniqueList } from '../model/technique.js';
 import { stat, cmLabel } from './panels/helpers.js';
 import { rowLayout, panelRows, panelPassesFor, drawnGauge, rowGauge } from '../model/rows.js';
 import { compilePasses, stitchOf } from '../model/passes.js';
@@ -379,9 +380,7 @@ function detailsPage() {
           value: project.name,
           onchange: (event) => {
             const name = event.target.value.trim() || 'Untitled';
-            commit('rename project', (p) => {
-              p.name = name;
-            });
+            renameOpenProject(name).catch((error) => toast(`Rename failed: ${error.message}`, 'error'));
           },
         })
       ),
@@ -397,22 +396,7 @@ function detailsPage() {
             }),
         }),
         'How the colorwork is knitted. Decides the Knittability checks and what the knit screen does. Also switchable in the Stitches panel.'
-      ),
-      getTechnique(project.technique).id === 'jacquard'
-        ? field(
-            'Backing',
-            select({
-              value: getBacking(project.jacquardBacking).id,
-              options: backingList().map((b) => [b.id, b.label]),
-              onchange: (v) =>
-                commit('jacquard backing', (p) => {
-                  p.jacquardBacking = v;
-                }),
-            }),
-            backingList().map((b) => `${b.label}: ${b.title}`).join('\n') +
-              '\n\nThe knit screen starts from this and can override it.'
-          )
-        : null
+      )
     ),
     group(
       'Notes',

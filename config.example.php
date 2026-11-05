@@ -10,4 +10,10 @@ return [
     // Leaving it out means 'browser'. The KNIT_STORAGE environment variable
     // overrides this file (see the Dockerfile).
     'storage' => 'server',
+
+    // Extra scripts loaded as modules after the app, such as your own site's
+    // analytics. Empty by default: a copy reports to no one unless its owner
+    // adds something here.
+    //   'scripts' => ['/admin/js/tracker.js'],
+    'scripts' => [],
 ];

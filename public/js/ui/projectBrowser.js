@@ -22,13 +22,13 @@
 import { on } from '../core/bus.js';
 import { state } from '../core/store.js';
 import {
-  listProjects, openProject, deleteProject, confirmDiscard,
+  listProjects, openProject, deleteProject, renameProject, confirmDiscard,
   recentProjects, lastUsed, parseDbTime,
 } from './projectStore.js';
 import { h, clear, toast } from './dom.js';
 import { svgPath, guarded } from './panels/helpers.js';
 import {
-  mdiMagnify, mdiClose, mdiHistory, mdiViewGridOutline, mdiTrashCanOutline,
+  mdiMagnify, mdiClose, mdiHistory, mdiViewGridOutline, mdiTrashCanOutline, mdiPencil,
 } from '../icons.js';
 
 const RECENT_COUNT = 12;
@@ -113,6 +113,17 @@ function build() {
     svgPath(mdiTrashCanOutline, 15),
     h('span', {}, 'Delete')
   );
+  const renameBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'btn pb-rename',
+      title: 'Rename the selected project  (F2)',
+      onclick: () => renameSelected(),
+    },
+    svgPath(mdiPencil, 15),
+    h('span', {}, 'Rename')
+  );
   const openBtn = h('button', {
     type: 'button',
     class: 'btn primary',
@@ -155,6 +166,7 @@ function build() {
       'footer',
       { class: 'pb-foot' },
       details,
+      renameBtn,
       deleteBtn,
       h('button', {
         type: 'button',
@@ -291,6 +303,7 @@ function build() {
     const row = selectedRow();
     openBtn.disabled = !row || view.busy;
     deleteBtn.disabled = !row || view.busy;
+    renameBtn.disabled = !row || view.busy;
 
     clear(details);
     if (!row) return;
@@ -342,6 +355,15 @@ function build() {
     toast('Project deleted.', 'ok');
   }, fail);
 
+  const renameSelected = guarded(async () => {
+    const row = selectedRow();
+    if (!row || view.busy) return;
+    const name = prompt('Rename project', row.name)?.trim();
+    if (!name || name === row.name) return;
+    await renameProject(row.id, name); // relists, which re-renders via the bus
+    toast(`Renamed to ${name}.`, 'ok');
+  }, fail);
+
   // --- keyboard ---------------------------------------------------------------
 
   /** Columns in the grid as laid out now, for Up and Down. */
@@ -388,6 +410,12 @@ function build() {
       case 'Enter':
         event.preventDefault();
         return openSelected();
+      case 'F2':
+        if (onCard) {
+          event.preventDefault();
+          renameSelected();
+        }
+        return;
       case 'Delete':
         if (onCard) {
           event.preventDefault();

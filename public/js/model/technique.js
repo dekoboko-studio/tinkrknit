@@ -7,8 +7,8 @@
  *
  *   fairisle  single bed, one pass per row, two feeders. Two colors per row and
  *             the unused one floats across the back (CLAUDE.md 1.2, 1.5).
- *   jacquard  double bed with the ribber, one pass per color per row, the
- *             back knitted on the ribber. No floats; colors per row are limited
+ *   jacquard  double bed with the ribber, one pass per color per row (two
+ *             with `jacquardRows` 2), the back knitted on the ribber. No floats; colors per row are limited
  *             by the color changer and by how thick the backing gets, so the
  *             limit is a setting rather than a fact.
  *   slipcolor single bed, one feeder. Each row is knitted once per color in
@@ -81,37 +81,35 @@ export const TECHNIQUES = {
 export const DEFAULT_PASSES_PER_COLOR = 2;
 export const passesPerColor = (project) => (project.stitch?.passesPerColor === 1 ? 1 : 2);
 
+/**
+ * Rows of front stitches a jacquard knits per drawn row. One staggers the
+ * colors over pairs of rows (A B | B A), so a color's out and back serve two
+ * rows and every change is at the color changer: SilverKnit's staggered
+ * sequence, DesignaKnit's separation method B. Two knits each color out and
+ * back on the same row, which doubles the motif's height (model/passes.js).
+ */
+export const jacquardRows = (project) => (project.stitch?.jacquardRows === 2 ? 2 : 1);
+
+/** Rows each needle knits per drawn row, for the drawn-row gauge (model/rows.js). */
+export function rowsPerDrawnRow(project) {
+  const id = getTechnique(project.source?.technique ?? project.technique).id;
+  return id === 'jacquard' ? jacquardRows(project) : passesPerColor(project);
+}
+
 export const DEFAULT_TECHNIQUE = 'fairisle';
 export const DEFAULT_JACQUARD_COLORS = 4;
 
 /**
- * How the ribber knits the back of a jacquard. It changes the fabric, not the
- * chart: the front is the same stitches whichever is used. So the project
- * saves a preferred backing and the knit screen may override it per job,
- * like Swap feeders - it is decided at the machine as often as at the desk.
+ * How the ribber knits the back of a jacquard, for the knit screen's tooltip.
+ * It is not a setting: it changes nothing the main bed is sent, only how the
+ * ribber carriage and its needles are set up, so it is chosen at the machine.
  */
-export const JACQUARD_BACKINGS = {
-  birdseye: {
-    id: 'birdseye',
-    label: 'Birdseye',
-    title: 'Colors alternate on the back needle by needle. Firm, flat, the usual choice.',
-  },
-  striped: {
-    id: 'striped',
-    label: 'Striped',
-    title: 'Each color knits a full row on the back. Thicker and warmer; the back shows stripes.',
-  },
-  ladder: {
-    id: 'ladder',
-    label: 'Ladder',
-    title: 'Every other ribber needle out of work. Lighter, but floats short ladders across the back.',
-  },
-};
-
-export const DEFAULT_BACKING = 'birdseye';
-
-export const getBacking = (id) => JACQUARD_BACKINGS[id] ?? JACQUARD_BACKINGS[DEFAULT_BACKING];
-export const backingList = () => Object.values(JACQUARD_BACKINGS);
+export const BACKING_HINT = [
+  'The backing is set on the ribber, not in the pattern:',
+  'Birdseye: colors alternate on the back needle by needle. Firm, flat, the usual choice.',
+  'Striped: each color knits a full row on the back. Thicker and warmer; the back shows stripes.',
+  'Ladder: every other ribber needle out of work. Lighter, but floats short ladders across the back.',
+].join('\n');
 
 export function getTechnique(id) {
   return TECHNIQUES[id] ?? TECHNIQUES[DEFAULT_TECHNIQUE];

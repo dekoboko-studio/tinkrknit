@@ -25,7 +25,6 @@
 import { compilePasses, rowStarts } from '../model/passes.js';
 import { byDrawnRow } from '../model/rows.js';
 import { colorAt } from '../model/palette.js';
-import { getBacking } from '../model/technique.js';
 import { MAX_NEEDLES } from './protocol.js';
 
 const JOB_KEY = 'knit-designer:knit-job';
@@ -56,6 +55,8 @@ function planFields(plan) {
       bits: Array.from(p.bits),
       substituted: p.substituted,
       ...(p.ribber ? { ribber: true } : {}),
+      ...(p.travel ? { travel: true } : {}),
+      ...(p.wrap ? { wrap: true } : {}),
     })),
   };
 }
@@ -73,12 +74,6 @@ export function buildJob(project) {
      * labels. Jobs saved before this field existed are Fair Isle.
      */
     technique: plan.technique,
-    /**
-     * Jacquard only: the design's preferred backing. The knit screen's own
-     * setting overrides it, so it is left out of `sameKnitting` - changing it
-     * does not make the design "new" and cost the knitter their place.
-     */
-    backing: getBacking(project.jacquardBacking).id,
     sentAt: new Date().toISOString(),
     ...planFields(plan),
     /** One repeat, same layout as the panel fields above. */

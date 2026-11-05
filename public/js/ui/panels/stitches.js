@@ -2,7 +2,7 @@
  * Stitches panel: the knit technique with its settings, and the stitch layer.
  *
  * The technique is chosen here rather than in Knittability because it is a
- * decision about how to knit, and its settings (passes per color, backing,
+ * decision about how to knit, and its settings (passes per color, rows per pixel,
  * the stitch chart conversion) sit under it. Knittability still names it,
  * since that is what it judges by, with a link back here. Project settings >
  * Details edits the same value.
@@ -26,7 +26,7 @@ import { reactive } from './helpers.js';
 import { mdiCheckerboard } from '../../icons.js';
 import { OPS, KNIT, stitchLayer, hasStitches } from '../../model/stitch.js';
 import {
-  getTechnique, techniqueList, passesPerColor, getBacking, backingList,
+  getTechnique, techniqueList, passesPerColor, jacquardRows,
 } from '../../model/technique.js';
 import { compilePasses, stitchChart } from '../../model/passes.js';
 import { passesForRows, rowLayout, panelRows } from '../../model/rows.js';
@@ -72,24 +72,22 @@ function techniqueSection(project, technique) {
     out.push(
       h(
         'label',
-        {
-          class: 'inline-field',
-          title: backingList().map((b) => `${b.label}: ${b.title}`).join('\n') + '\n\nThe knit screen starts from this and can override it.',
-        },
-        h('span', {}, 'Backing'),
-        select({
-          value: getBacking(project.jacquardBacking).id,
-          options: backingList().map((b) => [b.id, b.label]),
-          onchange: (v) =>
-            commit('jacquard backing', (p) => {
-              p.jacquardBacking = v;
+        { class: 'inline-field', title: 'Rows of front stitches each chart row knits. Both change yarn only at the color changer; start with the carriage on the side away from it.' },
+        h('span', {}, 'Rows per pixel'),
+        segmented({
+          value: jacquardRows(project),
+          options: [
+            [1, '1', 'Staggered: colors alternate A B | B A over pairs of rows, each stitch knitted once. A travel pass is added where a change would land on the far side.'],
+            [2, '2', 'Doubled: each color out and back on the same row, so the motif comes out about twice as tall'],
+          ],
+          onchange: (n) =>
+            commit('jacquard rows per pixel', (p) => {
+              p.stitch = { ...p.stitch, jacquardRows: n };
             }),
         })
       )
     );
-  }
-
-  if (technique.perColor) {
+  } else if (technique.perColor) {
     out.push(
       h(
         'label',

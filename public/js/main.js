@@ -27,7 +27,7 @@ import { loadYarns, loadStamps, openLibrary } from './ui/library.js';
 import { openProjectSettings } from './ui/projectSettings.js';
 import { openAbout, USER_GUIDE_URL, KOFI_URL } from './ui/about.js';
 import { copySelection, cutSelection, paste, clearSelection } from './ui/selectionActions.js';
-import { listProjects, saveProject, importProjectFile, confirmDiscard } from './ui/projectStore.js';
+import { listProjects, saveProject, importProjectFile, confirmDiscard, renameOpenProject } from './ui/projectStore.js';
 import { initBackup } from './ui/backup.js';
 import { initPwa } from './pwa.js';
 import { serialSupported } from './knit/serial.js';
@@ -185,7 +185,7 @@ const nameInput = h('input', {
   onchange: (event) => {
     const name = event.target.value.trim() || 'Untitled';
     event.target.value = name;
-    if (name !== state.project.name) commit('rename project', (p) => { p.name = name; });
+    renameOpenProject(name).catch((error) => toast(`Rename failed: ${error.message}`, 'error'));
   },
 });
 

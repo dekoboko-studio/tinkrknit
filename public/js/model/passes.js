@@ -15,7 +15,7 @@
  *                   Isle it is the design after any row was reduced to two
  *                   colors; for slip and tuck it is the intended result.
  *     passes,       in knitting order, cast-on first:
- *                   { row, cam, feeders, bits, ribber?, backing? }
+ *                   { row, cam, feeders, bits, ribber? }
  *                     row      chart row, 0 = the cast-on edge
  *                     cam      the carriage setting (CAMS below)
  *                     feeders  palette indices by feeder: [feeder 1, feeder 2]
@@ -23,7 +23,10 @@
  *                     bits     one per stitch, chart left to right;
  *                              1 = needle selected
  *                     ribber   the ribber knits this pass too
- *                     backing  jacquard: the backing the ribber knits
+ *                     travel   jacquard: nothing selected, the pass only
+ *                              takes the yarn back to the color changer
+ *                     wrap     a travel pass knitted only when the plan
+ *                              repeats, leading back into pass 0
  *     substitutions [{ row, x, from, to }], row counted from the cast-on, 1-based:
  *                   stitches that cannot be knitted as drawn and show `to`
  *   }
@@ -40,7 +43,7 @@
 import { expandPanel } from './project.js';
 import { reduceRowToPair } from './validate.js';
 import { hexToRgb, colorAt } from './palette.js';
-import { getTechnique, passesPerColor, getBacking } from './technique.js';
+import { getTechnique, passesPerColor, jacquardRows } from './technique.js';
 import { KNIT, TUCK, SLIP, stitchLayer } from './stitch.js';
 
 /**
@@ -155,8 +158,12 @@ function colorBits(row, color) {
  * A one-color row is knitted plain.
  */
 function slipColorPlan(project, grid) {
+  return perColorPlan(grid, passesPerColor(project));
+}
+
+/** One pass set per color per row, `per` passes each; slip stitch and doubled jacquard. */
+function perColorPlan(grid, per) {
   const { w, h } = grid;
-  const per = passesPerColor(project);
   const passes = [];
   for (let row = 0; row < h; row++) {
     const y = h - 1 - row;
@@ -172,17 +179,75 @@ function slipColorPlan(project, grid) {
 }
 
 /**
+ * Jacquard with every stitch knitted once: one pass per color per row, with
+ * each yarn changed only at the color changer. The carriage starts on the
+ * side away from the changer, so it is at the changer after an odd number of
+ * passes. A row starts with the yarn already in the carriage and ends, where
+ * it can, with a color the next row uses, so two-color rows run A B | B A
+ * with no extra passes. When a change would fall on the far side, a travel
+ * pass takes the old yarn back with nothing selected: the main bed slips and
+ * only the ribber knits, so the front gains nothing.
+ *
+ * A repeat goes from its last pass straight back to pass 0, so the plan also
+ * closes the loop: it ends with the carriage back on the start side holding
+ * pass 0's yarn. Where the rows alone do not (an odd count of two-color rows
+ * flips the yarn, a one-color row flips the side), travel passes marked
+ * `wrap` are added at the end; the knit screen knits them only when it
+ * repeats. Row 0 may start with any of its colors, and the order needing the
+ * fewest passes in all is kept.
+ */
+function staggeredPlan(grid) {
+  const { w, h } = grid;
+  const line = (row) => grid.data.subarray((h - 1 - row) * w, (h - row) * w);
+  let best = null;
+  for (const seed of [null, ...rowColors(line(0))]) {
+    const passes = staggeredPasses(grid, line, seed);
+    if (!best || passes.length < best.length) best = passes;
+  }
+  return { chart: grid.data.slice(), passes: best, substitutions: [] };
+}
+
+/** One staggered sequence, row 0 starting with `seed` if it uses it, closed for repeating. */
+function staggeredPasses(grid, line, seed) {
+  const { w, h } = grid;
+  const travel = (row, yarn, wrap) => ({ row, cam: 'jacquard', feeders: [yarn], bits: new Uint8Array(w), substituted: 0, travel: true, ...(wrap ? { wrap: true } : {}) });
+  const passes = [];
+  let yarn = seed;
+  for (let row = 0; row < h; row++) {
+    const here = line(row);
+    const colors = rowColors(here);
+    const next = row + 1 < h ? new Set(line(row + 1)) : null;
+    const rank = (c) => (c === yarn ? 0 : next?.has(c) ? 2 : 1);
+    const order = colors.slice().sort((a, b) => rank(a) - rank(b) || a - b);
+    for (const color of order) {
+      if (yarn !== null && color !== yarn && passes.length % 2 === 0) {
+        passes.push(travel(row, yarn, false));
+      }
+      yarn = color;
+      const bits = colors.length === 1 ? new Uint8Array(w).fill(1) : colorBits(here, color);
+      passes.push({ row, cam: 'jacquard', feeders: [color], bits, substituted: 0 });
+    }
+  }
+  // Back to pass 0: its yarn in the carriage, the carriage on the start side.
+  const first = passes[0].feeders[0];
+  if (yarn !== first && passes.length % 2 === 0) passes.push(travel(h - 1, yarn, true));
+  if (yarn !== first || passes.length % 2 === 1) passes.push(travel(h - 1, first, true));
+  return passes;
+}
+
+/**
  * Double-bed jacquard: one color at a time on the main bed, as slip stitch
  * does, with the ribber knitting the back on every pass. The main carriage
- * slips what it does not select; the backing is set on the ribber carriage.
+ * slips what it does not select. The backing is set on the ribber carriage
+ * and changes nothing sent to the main bed, so the plan does not carry it.
+ * Staggered by default; `jacquardRows` 2 knits each color out and back on
+ * the same row, every stitch twice.
  */
 function jacquardPlan(project, grid) {
-  const plan = slipColorPlan(project, grid);
-  const backing = getBacking(project.jacquardBacking).id;
+  const plan = jacquardRows(project) === 2 ? perColorPlan(grid, 2) : staggeredPlan(grid);
   for (const pass of plan.passes) {
     pass.cam = 'jacquard';
     pass.ribber = true;
-    pass.backing = backing;
   }
   return plan;
 }

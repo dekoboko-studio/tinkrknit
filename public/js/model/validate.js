@@ -158,7 +158,7 @@ function summarize(counts, maxColors) {
  * The one-feeder techniques, checked pass by pass on the panel's plan.
  *
  *  - Every pass must knit something, or the carriage drags the yarn across
- *    the bed and drops it.
+ *    the bed and drops it. A ribber pass always does, on the ribber.
  *  - A tucked loop can only be held a few passes before it is too tight to
  *    knit off (`maxTuck`); a slipped stitch likewise (`maxSlip`).
  *  - The yarn floats behind every slipped needle, so a run of slips is a
@@ -194,7 +194,8 @@ function passChecks(project, technique, rows, errors, warnings, counts) {
       const op = x < width ? stitchOf(pass, x).op : KNIT;
       if (op === KNIT) {
         if (x < width) knits++;
-        if (run > limit) {
+        // With the ribber knitting, a slipped needle's yarn goes to the back bed: no float.
+        if (run > limit && !pass.ribber) {
           counts.longFloats++;
           flag(pass.row, 'warn', 'long float');
         }
@@ -211,7 +212,7 @@ function passChecks(project, technique, rows, errors, warnings, counts) {
         flag(pass.row, 'warn', op === TUCK ? 'tuck held' : 'slip held');
       }
     }
-    if (!knits) {
+    if (!knits && !pass.ribber) {
       counts.empty++;
       flag(pass.row, 'error', 'knits nothing');
     }

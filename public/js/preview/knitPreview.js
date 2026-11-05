@@ -46,7 +46,6 @@ function planKey(project) {
     project.repeat,
     project.stitch,
     project.validation?.maxSlip,
-    project.jacquardBacking,
     project.palette.map((s) => s.color),
     project.tile.w,
     Array.from(project.tile.data).join(''),

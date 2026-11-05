@@ -15,7 +15,7 @@
 
 import * as bitmap from './bitmap.js';
 import * as palette from './palette.js';
-import { DEFAULT_TECHNIQUE, DEFAULT_JACQUARD_COLORS, DEFAULT_BACKING, DEFAULT_PASSES_PER_COLOR } from './technique.js';
+import { DEFAULT_TECHNIQUE, DEFAULT_JACQUARD_COLORS, DEFAULT_PASSES_PER_COLOR } from './technique.js';
 import { stitchLayer } from './stitch.js';
 
 export const DEFAULTS = {
@@ -44,8 +44,6 @@ export function createProject(opts = {}) {
     name,
     /** model/technique.js - which rules the chart is checked against and how it knits. */
     technique: DEFAULT_TECHNIQUE,
-    /** Jacquard only: the backing the knit screen starts from (it may override). */
-    jacquardBacking: DEFAULT_BACKING,
     tile: bitmap.createBitmap(tileW, tileH, 0),
     /** Knit, tuck or slip per tile cell (model/stitch.js). Same size as the tile. */
     stitches: bitmap.createBitmap(tileW, tileH, 0),
@@ -219,7 +217,6 @@ export function serialize(project) {
     version: DOC_VERSION,
     name: project.name,
     technique: project.technique,
-    jacquardBacking: project.jacquardBacking,
     tile: bitmap.toJSON(project.tile),
     stitches: bitmap.toJSON(stitchLayer(project)),
     stitch: { ...project.stitch },
@@ -262,7 +259,6 @@ export function deserialize(doc) {
   });
 
   if (doc.technique) project.technique = doc.technique;
-  if (doc.jacquardBacking) project.jacquardBacking = doc.jacquardBacking;
   if (doc.tile) project.tile = bitmap.fromJSON(doc.tile);
   // Documents from before the stitch layer have none; stitchLayer() makes an
   // all-knit one the size of the tile, and resizes one that no longer fits.

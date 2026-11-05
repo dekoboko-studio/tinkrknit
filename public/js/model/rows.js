@@ -14,7 +14,7 @@
  * passes the machine is sent are unchanged.
  */
 
-import { getTechnique, passesPerColor } from './technique.js';
+import { getTechnique, rowsPerDrawnRow } from './technique.js';
 
 const layouts = new WeakMap();
 
@@ -158,5 +158,5 @@ export function drawnGauge(project) {
 export function rowGauge(project) {
   const { gauge } = project;
   if (!drawnGauge(project)) return gauge.rowsPer10;
-  return gauge.drawnRowsPer10 || gauge.rowsPer10 / passesPerColor(project);
+  return gauge.drawnRowsPer10 || gauge.rowsPer10 / rowsPerDrawnRow(project);
 }

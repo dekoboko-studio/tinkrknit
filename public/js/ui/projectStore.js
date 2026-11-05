@@ -9,7 +9,7 @@
  */
 
 import { api } from '../api.js';
-import { state, replaceProject, setLibrary } from '../core/store.js';
+import { state, replaceProject, setLibrary, commit } from '../core/store.js';
 import { serialize, deserialize, createProject, expandPanel } from '../model/project.js';
 import { emit } from '../core/bus.js';
 
@@ -153,6 +153,41 @@ export async function openProject(id) {
   replaceProject(project);
   touchRecent(row.id);
   return project;
+}
+
+/**
+ * Rename a saved project in the library, now, without saving anything else:
+ * a name is not a design edit, and renaming should not wait for a Save that
+ * would also write whatever else is half done. The name lives in both the
+ * row and the document, which is what is read back on open.
+ */
+export async function renameProject(id, name) {
+  const row = await api.get('projects', id);
+  await api.update('projects', id, { name, doc: { ...row.doc, name } });
+  await listProjects();
+  if (state.project.id === id && state.project.name !== name) {
+    state.project.name = name;
+    emit('save:changed', { saving: false }); // redraws the toolbar's name
+  }
+}
+
+/**
+ * Rename the open project. Once it has been saved the library follows at
+ * once, and a project that had no other changes stays saved.
+ */
+export async function renameOpenProject(name) {
+  const project = state.project;
+  if (name === project.name) return;
+  const clean = !state.dirty;
+  commit('rename project', (p) => {
+    p.name = name;
+  });
+  if (!project.id) return;
+  await renameProject(project.id, name);
+  if (clean) {
+    state.dirty = false;
+    emit('save:changed', { saving: false });
+  }
 }
 
 export async function deleteProject(id) {

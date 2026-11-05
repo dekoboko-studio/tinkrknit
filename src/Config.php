@@ -47,4 +47,19 @@ final class Config
     {
         return self::storage() === 'server';
     }
+
+    /**
+     * Extra module scripts this server adds to the page, such as its own
+     * analytics. None by default, so a self-hosted copy reports to no one.
+     *
+     * @return list<string>
+     */
+    public static function scripts(): array
+    {
+        $scripts = self::file()['scripts'] ?? [];
+        if (!is_array($scripts)) {
+            return [];
+        }
+        return array_values(array_filter($scripts, fn ($s) => is_string($s) && $s !== ''));
+    }
 }

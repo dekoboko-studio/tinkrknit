@@ -97,6 +97,9 @@ $version = (string) @filemtime(__DIR__ . '/js/main.js') ?: '1';
 </noscript>
 
 <script type="module" src="js/main.js?v=<?= htmlspecialchars($version, ENT_QUOTES) ?>"></script>
+<?php foreach (\Knit\Config::scripts() as $script): ?>
+<script type="module" src="<?= htmlspecialchars($script, ENT_QUOTES) ?>"></script>
+<?php endforeach; ?>
 <?php endif; ?>
 
 </body>
