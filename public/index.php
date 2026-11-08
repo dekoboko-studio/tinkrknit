@@ -36,8 +36,32 @@ if ($storage === 'server') {
     }
 }
 
-/** Cache buster: bump on deploy, or just reload after an edit in dev. */
-$version = (string) @filemtime(__DIR__ . '/js/main.js') ?: '1';
+/**
+ * Cache busting with no build step. Every module's URL carries a hash of its
+ * own contents, through an import map, so `import './core/bus.js'` resolves to
+ * `js/core/bus.js?v=<hash>`. A deploy changes the URL of exactly the files that
+ * changed, and no browser can pair a new main.js with a stale module from its
+ * HTTP cache - which left a blank page until the cache was cleared. A content
+ * hash rather than a mtime, because uploads that keep file times would leave
+ * the URL unchanged.
+ */
+$asset = static fn (string $path): string =>
+    $path . '?v=' . substr((string) @md5_file(__DIR__ . '/' . $path), 0, 10);
+
+$imports = [];
+$modules = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator(__DIR__ . '/js', FilesystemIterator::SKIP_DOTS)
+);
+foreach ($modules as $file) {
+    if ($file->getExtension() !== 'js') continue;
+    $path = 'js/' . str_replace('\\', '/', substr($file->getPathname(), strlen(__DIR__ . '/js/')));
+    $imports['./' . $path] = './' . $asset($path);
+}
+ksort($imports);
+$importMap = json_encode(['imports' => $imports], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
+
+// The page holds the map, so it must never be reused without asking.
+header('Cache-Control: no-cache');
 ?>
 <!doctype html>
 <html lang="en" data-theme="dark">
@@ -50,7 +74,8 @@ $version = (string) @filemtime(__DIR__ . '/js/main.js') ?: '1';
 <link rel="icon" type="image/png" href="img/logo-white-notxt.png">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="img/icon-180.png">
-<link rel="stylesheet" href="css/app.css?v=<?= htmlspecialchars($version, ENT_QUOTES) ?>">
+<link rel="stylesheet" href="<?= htmlspecialchars($asset('css/app.css'), ENT_QUOTES) ?>">
+<script type="importmap"><?= $importMap ?></script>
 </head>
 <body>
 
@@ -96,7 +121,7 @@ $version = (string) @filemtime(__DIR__ . '/js/main.js') ?: '1';
   <p class="boot-error">This is a JavaScript application. Enable JavaScript to use it.</p>
 </noscript>
 
-<script type="module" src="js/main.js?v=<?= htmlspecialchars($version, ENT_QUOTES) ?>"></script>
+<script type="module" src="<?= htmlspecialchars($asset('js/main.js'), ENT_QUOTES) ?>"></script>
 <?php foreach (\Knit\Config::scripts() as $script): ?>
 <script type="module" src="<?= htmlspecialchars($script, ENT_QUOTES) ?>"></script>
 <?php endforeach; ?>
