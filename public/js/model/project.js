@@ -42,13 +42,19 @@ export function createProject(opts = {}) {
   return {
     id: null,
     name,
-    /** model/technique.js - which rules the chart is checked against and how it knits. */
+    /**
+     * model/technique.js. `texture` makes this a stitch chart; any other is a
+     * color chart checked as that technique. How a color chart knits is
+     * picked on the knit screen, per session.
+     */
     technique: DEFAULT_TECHNIQUE,
     tile: bitmap.createBitmap(tileW, tileH, 0),
     /** Knit, tuck or slip per tile cell (model/stitch.js). Same size as the tile. */
     stitches: bitmap.createBitmap(tileW, tileH, 0),
     /** Settings for the one-color-per-pass techniques. */
     stitch: { passesPerColor: DEFAULT_PASSES_PER_COLOR, ribber: false },
+    // `stitch.colorTechnique`: what a stitch chart was checked as while it was
+    // a color chart, so turning it back restores that (setChartKind()).
     panel: { w: panelW, h: panelH },
     palette: palette.createPalette(),
     repeat: { horizontal: true, vertical: true, alignment: 'center' },

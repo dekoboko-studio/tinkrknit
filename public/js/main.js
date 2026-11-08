@@ -34,11 +34,12 @@ import { serialSupported } from './knit/serial.js';
 import { openFullPreview, isFullPreviewOpen } from './ui/previewOverlay.js';
 import { setZoom, MIN_CELL, MAX_CELL, rowTop, rowHeight } from './editor/viewport.js';
 import { rowLayout, rowName, panelRows } from './model/rows.js';
+import { getTechnique, isStitchChart } from './model/technique.js';
 import { h, $, clear, toast, checkbox } from './ui/dom.js';
 import { svgPath } from './ui/panels/helpers.js';
 import {
   mdiUndoVariant, mdiRedoVariant, mdiEyeOutline, mdiContentSave, mdiSend, mdiMinus, mdiPlus,
-  mdiTune, mdiBookshelf, mdiAspectRatio, mdiCheckCircleOutline, mdiAlertCircleOutline,
+  mdiTune, mdiBookshelf, mdiAspectRatio, mdiCheckCircleOutline, mdiAlertCircleOutline, mdiCheckerboard,
   mdiHelpCircleOutline, mdiHeartOutline,
 } from './icons.js';
 import { buildJob, jobBlocker } from './knit/job.js';
@@ -360,7 +361,8 @@ function openKnit() {
   const blocker = jobBlocker(state.project);
   if (blocker) return toast(blocker, 'error', 6000);
 
-  const job = buildJob(state.project);
+  // A color chart knits as the knit screen's technique, kept across jobs.
+  const job = buildJob(state.project, knitScreen.technique());
   knitScreen.open(job);
   if (job.substitutions) {
     toast(`${job.substitutions} stitches were reduced to two colors per row for knitting.`, 'warn', 7000);
@@ -402,6 +404,22 @@ function renderStatusbar() {
       h('span', {}, 'Panel ', h('strong', {}, `${panel.w} x ${panelRows(state.project)}`)),
       // A converted stitch chart is sized in drawn rows; this is what it knits.
       layout ? h('span', { class: 'muted' }, `(${panel.h} passes)`) : null
+    ),
+    // What kind of chart this is decides how it can knit, and it used to be
+    // a select halfway down a panel. A color chart also names what it is
+    // checked as; how it knits is the knit screen's choice.
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'sb-chip',
+        title: 'Color chart or stitch chart, and what the chart is checked as  (Stitches panel)',
+        onclick: () => dock.reveal('stitches'),
+      },
+      svgPath(mdiCheckerboard, 14),
+      isStitchChart(state.project)
+        ? h('strong', {}, 'Stitch chart')
+        : h('span', {}, 'Color chart', h('span', { class: 'sb-dot' }, '·'), 'checked as ', h('strong', {}, getTechnique(state.project.technique).label))
     ),
     h(
       'button',

@@ -25,6 +25,9 @@
 import { compilePasses, rowStarts } from '../model/passes.js';
 import { byDrawnRow } from '../model/rows.js';
 import { colorAt } from '../model/palette.js';
+import { serialize, deserialize } from '../model/project.js';
+import { validateProject } from '../model/validate.js';
+import { colorTechniques, colorTechniqueOf, isColorTechnique, isStitchChart } from '../model/technique.js';
 import { MAX_NEEDLES } from './protocol.js';
 
 const JOB_KEY = 'knit-designer:knit-job';
@@ -61,29 +64,77 @@ function planFields(plan) {
   };
 }
 
-export function buildJob(project) {
+/**
+ * The technique a project knits as: a stitch chart only as Tuck & slip, a
+ * color chart as `as` when that is a color technique (the knit screen's
+ * choice), else as the designer checks it.
+ */
+const knitTechnique = (project, as) =>
+  isStitchChart(project) ? project.technique : isColorTechnique(as) ? as : colorTechniqueOf(project);
+
+/**
+ * Freeze the project into a job, knitted as `as` (see knitTechnique). The
+ * design rides along as `design`, so the knit screen can knit the same
+ * snapshot as another technique without going back to the designer.
+ */
+export function buildJob(project, as) {
+  const technique = knitTechnique(project, as);
+  const knitted = { ...project, technique };
   // A converted stitch chart is knitted by drawn row (model/rows.js).
-  const plan = byDrawnRow(project, compilePasses(project, 'panel'), 'panel');
+  const plan = byDrawnRow(knitted, compilePasses(knitted, 'panel'), 'panel');
   return {
     version: 3,
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     name: project.name,
     /**
-     * How the design is meant to be knitted (model/technique.js). The passes
-     * already say what each carriage pass does; this is for the screen's
-     * labels. Jobs saved before this field existed are Fair Isle.
+     * How this job knits (model/technique.js). The passes already say what
+     * each carriage pass does; this is for the screen's labels. Jobs saved
+     * before this field existed are Fair Isle.
      */
-    technique: plan.technique,
+    technique,
+    /** A stitch chart knits only as Tuck & slip; a color chart as any color technique. */
+    stitchChart: isStitchChart(project),
+    /** What the designer checks a color chart as, for the knit screen to mention. */
+    checkedAs: colorTechniqueOf(project),
+    /** The design as sent (model/project.js serialize). Jobs before this cannot change technique. */
+    design: serialize(project),
     sentAt: new Date().toISOString(),
     ...planFields(plan),
     /** One repeat, same layout as the panel fields above. */
-    tile: planFields(byDrawnRow(project, compilePasses(project, 'tile'), 'tile')),
+    tile: planFields(byDrawnRow(knitted, compilePasses(knitted, 'tile'), 'tile')),
     yarns: project.palette.map((slot, index) => ({
       hex: colorAt(project.palette, index),
       name: slot.name || `Color ${index + 1}`,
     })),
     substitutions: plan.substitutions.length,
   };
+}
+
+/** True when the job can be knitted as another color technique. */
+export const canChangeTechnique = (job) => Boolean(job?.design) && !job.stitchChart;
+
+/**
+ * The same job, from the same design snapshot, knitted as another color
+ * technique. It keeps its id, so the session (markers, yarns) stays with it.
+ */
+export function withTechnique(job, as) {
+  const next = buildJob(deserialize(job.design), as);
+  return { ...next, id: job.id, name: job.name, sentAt: job.sentAt };
+}
+
+/**
+ * Each color technique this job could knit as, with what it costs on the
+ * machine and what would go wrong: { id, label, title, passes, problems,
+ * level }. For the knit screen's technique choice.
+ */
+export function techniqueOptions(job) {
+  const project = deserialize(job.design);
+  return colorTechniques().map((t) => {
+    const as = { ...project, technique: t.id };
+    const report = validateProject(as);
+    const passes = compilePasses(as, 'panel').passes.filter((p) => !p.wrap).length;
+    return { id: t.id, label: t.label, title: t.title, passes, problems: report.summary, level: report.level };
+  });
 }
 
 /**

@@ -37,7 +37,7 @@ import {
 import { cmForStitches, cmForRows, estimateYarn, colorShares, stitchAspect } from '../model/gauge.js';
 import { h, row, field, numberInput, select, checkbox, button, toast } from './dom.js';
 import { renameOpenProject } from './projectStore.js';
-import { getTechnique, techniqueList } from '../model/technique.js';
+import { getTechnique, colorTechniques, isStitchChart, setChartKind } from '../model/technique.js';
 import { stat, cmLabel } from './panels/helpers.js';
 import { rowLayout, panelRows, panelPassesFor, drawnGauge, rowGauge } from '../model/rows.js';
 import { compilePasses, stitchOf } from '../model/passes.js';
@@ -385,18 +385,32 @@ function detailsPage() {
         })
       ),
       field(
-        'Technique',
+        'Chart',
         select({
-          value: getTechnique(project.technique).id,
-          title: techniqueList().map((t) => `${t.label}: ${t.title}`).join('\n'),
-          options: techniqueList().map((t) => [t.id, t.label]),
-          onchange: (v) =>
-            commit('knit technique', (p) => {
-              p.technique = v;
-            }),
+          value: isStitchChart(project) ? 'stitches' : 'colors',
+          options: [
+            ['colors', 'Color chart'],
+            ['stitches', 'Stitch chart'],
+          ],
+          onchange: (v) => commit(v === 'stitches' ? 'stitch chart' : 'color chart', (p) => setChartKind(p, v)),
         }),
-        'How the colorwork is knitted. Decides the Knittability checks and what the knit screen does. Also switchable in the Stitches panel.'
-      )
+        'Drawn in colors (knitted as Fair Isle, Jacquard, Slip stitch or Mosaic, chosen on the knit screen), or drawn in knit, tuck and slip (Tuck & slip). Also switchable in the Stitches panel.'
+      ),
+      isStitchChart(project)
+        ? null
+        : field(
+            'Check as',
+            select({
+              value: getTechnique(project.technique).id,
+              title: colorTechniques().map((t) => `${t.label}: ${t.title}`).join('\n'),
+              options: colorTechniques().map((t) => [t.id, t.label]),
+              onchange: (v) =>
+                commit('check as', (p) => {
+                  p.technique = v;
+                }),
+            }),
+            'What Knittability and the preview check the chart as. How it is knitted is chosen on the knit screen.'
+          )
     ),
     group(
       'Notes',

@@ -25,13 +25,13 @@ import { createDriver, driverOf } from './drivers/index.js';
 import {
   loadJob, saveJob, loadSession, saveSession, sameKnitting,
   centeredLayout, layoutProblem, needleCount, panelNeedles, needleRow, yarnsFor, yarnChanges, yarnSide, yarnUsedAfter, nextChange, feederSlots, knitGrid, firstPassOf, passInRow,
-  yarnSetup, withYarns, yarnLetter,
+  yarnSetup, withYarns, yarnLetter, canChangeTechnique, withTechnique, techniqueOptions,
   toMarker, fromMarker, markerLabel, bedPosition,
 } from './job.js';
 import { h, append, clear, toast, select, checkbox, numberInput, button } from '../ui/dom.js';
 import { svgPath } from '../ui/panels/helpers.js';
 import { mdiArrowLeft } from '../icons.js';
-import { getTechnique, BACKING_HINT } from '../model/technique.js';
+import { getTechnique, isColorTechnique, BACKING_HINT } from '../model/technique.js';
 import { DEFAULT_MACHINE, getMachine, knitMachines } from '../model/machine.js';
 
 const LOG_LINES = 120;
@@ -103,7 +103,7 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
       // Sessions saved before the pass plan counted rows; those jobs were
       // Fair Isle, one pass per row, so the row was the pass.
       const { rowIndex, ...rest } = saved;
-      return { ...defaults, passIndex: rowIndex ?? 0, ...rest };
+      return { ...defaults, passIndex: rowIndex ?? 0, technique: colorTechniqueFor(forJob, null), ...rest };
     }
     // Same markers on the machine still fit the new job: they are still set.
     const scope = saved?.scope ?? 'panel';
@@ -124,6 +124,9 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
       // The machine is the knitter's, not the design's (designs store none),
       // so it stays from job to job.
       machine: saved?.machine ?? DEFAULT_MACHINE,
+      // How a color chart is knitted is the knitter's choice too, kept from
+      // job to job; the designer's own choice only fills in the first time.
+      technique: colorTechniqueFor(forJob, saved?.technique),
       scope,
       // Yarn letters and colors carry over while the design's colors are the
       // same ones, so pressing Knit after an edit keeps the cones as loaded.
@@ -131,6 +134,12 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
         ? { yarnLetters: saved.yarnLetters, yarnColors: saved.yarnColors ?? {}, yarnFor: saved.yarnFor }
         : {}),
     };
+  }
+
+  /** The session's color technique: `kept` if it is one, else the job's own when that is one. */
+  function colorTechniqueFor(forJob, kept) {
+    if (isColorTechnique(kept)) return kept;
+    return isColorTechnique(forJob.technique) ? forJob.technique : null;
   }
 
   /**
@@ -180,6 +189,30 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
     render();
   }
 
+  /**
+   * Knit the same design snapshot as another color technique. The passes
+   * change, so knitting starts again at row 1 and the setup is confirmed
+   * again; the markers and yarns stay.
+   */
+  function setTechnique(id) {
+    if (patterning || id === job.technique || !canChangeTechnique(job)) return;
+    const wasUnderWay = underWay();
+    job = withTechnique(job, id);
+    saveJob(job);
+    update({ technique: id, passIndex: 0, finished: false, markersSet: false });
+    addLog('info', `Knitting as ${techniqueLabel()}.`);
+    if (wasUnderWay) toast(`Knitting as ${techniqueLabel()}, from row 1.`, 'warn');
+  }
+
+  // The cost of each technique, computed once per design snapshot: it
+  // compiles and checks the panel four times.
+  let optionsCache = null;
+  function knitOptions() {
+    const key = `${job.id}:${job.sentAt}`;
+    if (optionsCache?.key !== key) optionsCache = { key, options: techniqueOptions(job) };
+    return optionsCache.options;
+  }
+
   const underWay = () => patterning || session.passIndex > 0 || session.passes > 0 || session.finished;
 
   /** Offer a job from the designer. Never throws away progress silently. */
@@ -187,9 +220,12 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
     if (!job) return loadNewJob(next);
     if (sameKnitting(job, next)) {
       // Unchanged design: keep the place, but pick up a rename, which
-      // changes no stitch.
-      if (job.name !== next.name) {
+      // changes no stitch, and the design snapshot a job saved before
+      // there was one lacks, without which the technique cannot change.
+      if (job.name !== next.name || !job.design) {
         job.name = next.name;
+        job.design = next.design;
+        job.stitchChart = next.stitchChart;
         saveJob(job);
         render();
       }
@@ -321,7 +357,7 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
     unlockAudio();
     const problem = markerProblem();
     if (problem) return toast(problem, 'error', 6000);
-    if (!session.markersSet) return toast('Confirm the needle markers first.', 'warn');
+    if (!session.markersSet) return toast('Confirm how it knits and the needle markers first.', 'warn');
     if (!connected) return toast('Connect to the controller first.', 'warn');
     if (session.finished) update({ finished: false, passIndex: 0 });
     patterning = true;
@@ -640,15 +676,18 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
         'section',
         { class: 'knit-card knit-bed' },
         h('div', { class: 'knit-bed-head' },
+          h('div', { title: getTechnique(job.technique).title },
+            h('div', { class: 'knit-row-label' }, 'Knit as'),
+            h('div', { class: 'knit-bed-range' }, techniqueLabel())),
           h('div', {},
             h('div', { class: 'knit-row-label' }, 'Needle markers'),
             h('div', { class: 'knit-bed-range' }, range)),
           h('span', { class: 'grow' }),
           button({
-            label: 'Change',
-            variant: 'ghost',
+            label: 'Change setup',
+            variant: 'knit-change',
             disabled: patterning,
-            title: patterning ? 'Stop patterning first' : 'Move the markers',
+            title: patterning ? 'Stop patterning first' : 'Change the technique or move the markers',
             onclick: () => update({ markersSet: false }),
           })),
         bedStrip(lay)
@@ -659,6 +698,7 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
     const card = h(
       'section',
       { class: 'knit-card knit-bed is-setup' },
+      ...renderTechnique(),
       h('div', { class: 'knit-row-label', title: 'Move the point cams on the machine to these needles before you knit.' }, 'Set the needle markers'),
       h('div', { class: 'knit-markers' },
         markerInput('Left marker', lay.left, (v) => set({ left: v })),
@@ -694,7 +734,8 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
           onclick: () => set({ ...centeredLayout(tiled ? count || job.tile.width : job.width), align: lay.align, endNeedles: lay.endNeedles }),
         })),
       button({
-        label: `Markers are set to ${range}`,
+        label: `Knit as ${techniqueLabel()} on ${range}`,
+        title: 'The carriage is set for this technique and the point cams are at these needles',
         variant: 'primary knit-confirm',
         disabled: Boolean(problem) || patterning,
         onclick: () => update({ markersSet: true }),
@@ -702,6 +743,36 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
     );
     if (patterning) card.querySelectorAll('input, select, button').forEach((el) => (el.disabled = true));
     return card;
+  }
+
+  /**
+   * The first half of the setup card: how this job knits. A color chart
+   * offers every color technique, each with its passes and what would go
+   * wrong, so the choice explains itself. A stitch chart knits only as drawn.
+   */
+  function renderTechnique() {
+    const label = h('div', { class: 'knit-row-label' }, 'Knit as');
+    // The carriage setting is a tooltip here; the yarn card says it again
+    // where the knitter looks at the first pass.
+    const carriage = `Carriage: ${camSetting(job.passes[0])[0]}`;
+    if (!canChangeTechnique(job)) {
+      const title = job.stitchChart
+        ? 'A stitch chart knits as drawn: knit, tuck or slip per needle. Make it a color chart in the Stitches panel to knit it another way.'
+        : 'Press Knit in the designer again to choose the technique here.';
+      return [label, h('div', { class: 'knit-technique-fixed', title: `${title}\n\n${carriage}` }, techniqueLabel())];
+    }
+
+    const options = knitOptions();
+    const chosen = options.find((o) => o.id === job.technique);
+    const el = select({
+      value: job.technique,
+      title: [carriage, ...(chosen?.problems ?? []), '', ...options.map((o) => `${o.label}: ${o.title}`)].join('\n'),
+      options: options.map((o) => [o.id, [o.label, `${o.passes} passes`, o.problems[0]].filter(Boolean).join(' · ')]),
+      onchange: setTechnique,
+    });
+    el.classList.add('knit-technique');
+    el.disabled = patterning;
+    return [label, el];
   }
 
   function renderSide() {
@@ -733,7 +804,7 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
     const problem = markerProblem(g);
     const count = needleCount(session.layout.left, session.layout.right);
 
-    const startBlocker = problem ?? (!session.markersSet ? 'Confirm the needle markers first.' : !connected ? 'Connect to the controller first.' : null);
+    const startBlocker = problem ?? (!session.markersSet ? 'Confirm how it knits and the needle markers first.' : !connected ? 'Connect to the controller first.' : null);
 
     append(side, [
       h(
@@ -1214,5 +1285,7 @@ export function createKnitScreen(host, { designer, onClose, onChange }) {
     close,
     isOpen: () => open,
     isPatterning: () => patterning,
+    /** The color technique the next job from the designer knits as, or null for the designer's. */
+    technique: () => session?.technique ?? null,
   };
 }

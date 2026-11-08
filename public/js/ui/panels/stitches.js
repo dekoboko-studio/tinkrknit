@@ -1,11 +1,13 @@
 /**
- * Stitches panel: the knit technique with its settings, and the stitch layer.
+ * Stitches panel: what kind of chart this is, its settings, and the stitch
+ * layer.
  *
- * The technique is chosen here rather than in Knittability because it is a
- * decision about how to knit, and its settings (passes per color, rows per pixel,
- * the stitch chart conversion) sit under it. Knittability still names it,
- * since that is what it judges by, with a link back here. Project settings >
- * Details edits the same value.
+ * A color chart and a stitch chart are two ways of designing
+ * (model/technique.js). A color chart is checked here as one color technique,
+ * with that technique's settings (passes per color, rows per pixel, the
+ * stitch chart conversion) under it; how it is knitted is chosen on the knit
+ * screen. Knittability names what it judges by, with a link back here.
+ * Project settings > Details edits the same values.
  *
  * The layer switch decides which grid the tools paint (editor/canvas.js), so
  * tuck and slip are drawn with the pencil, line, fill and the rest rather than
@@ -26,17 +28,17 @@ import { reactive } from './helpers.js';
 import { mdiCheckerboard } from '../../icons.js';
 import { OPS, KNIT, stitchLayer, hasStitches } from '../../model/stitch.js';
 import {
-  getTechnique, techniqueList, passesPerColor, jacquardRows,
+  getTechnique, colorTechniques, isStitchChart, setChartKind, passesPerColor, jacquardRows,
 } from '../../model/technique.js';
 import { compilePasses, stitchChart } from '../../model/passes.js';
 import { passesForRows, rowLayout, panelRows } from '../../model/rows.js';
 import * as bitmap from '../../model/bitmap.js';
 
 /**
- * Two sections, in the order you decide them. Technique first: how the piece
- * is knitted, and the settings that only that technique has, so switching it
- * swaps the controls under it and nothing else on screen moves. Then the
- * layer: which grid the tools paint, and on the stitch layer which stitch.
+ * Two sections, in the order you decide them. The chart first: color or
+ * stitch, and the settings that only it has, so switching swaps the controls
+ * under it and nothing else on screen moves. Then the layer: which grid the
+ * tools paint, and on the stitch layer which stitch.
  */
 function build() {
   const { project } = state;
@@ -44,7 +46,7 @@ function build() {
   return h(
     'div',
     { class: 'stack' },
-    h('h5', { class: 'sub-title', title: 'How the piece is knitted. The Knittability panel judges the chart by it.' }, 'Technique'),
+    h('h5', { class: 'sub-title', title: 'Drawn in colors, or drawn in knit, tuck and slip. The Knittability panel judges the chart by it.' }, 'Chart'),
     ...techniqueSection(project, technique),
     h('h5', { class: 'sub-title', title: 'Which grid the tools paint (Q)' }, 'Layer'),
     ...layerSection(project, technique)
@@ -52,21 +54,28 @@ function build() {
 }
 
 function techniqueSection(project, technique) {
-  const out = [];
+  const out = [chartKind(project)];
 
-  // A select, not a segmented control: five techniques do not fit the width.
+  // A select, not a segmented control: four techniques do not fit the width.
   // The tooltip lists them all, since the names alone do not say how they knit.
-  out.push(
-    select({
-      value: technique.id,
-      title: techniqueList().map((t) => `${t.label}: ${t.title}`).join('\n'),
-      options: techniqueList().map((t) => [t.id, t.label]),
-      onchange: (id) =>
-        commit('knit technique', (p) => {
-          p.technique = id;
-        }),
-    })
-  );
+  if (!technique.stitches) {
+    out.push(
+      h(
+        'label',
+        { class: 'inline-field', title: 'What Knittability and the preview check the chart as. How it is knitted is chosen on the knit screen.' },
+        h('span', {}, 'Check as'),
+        select({
+          value: technique.id,
+          title: colorTechniques().map((t) => `${t.label}: ${t.title}`).join('\n'),
+          options: colorTechniques().map((t) => [t.id, t.label]),
+          onchange: (id) =>
+            commit('check as', (p) => {
+              p.technique = id;
+            }),
+        })
+      )
+    );
+  }
 
   if (technique.id === 'jacquard') {
     out.push(
@@ -149,6 +158,25 @@ function techniqueSection(project, technique) {
   return out;
 }
 
+/**
+ * Color chart or stitch chart. A stitch chart made from colors goes back by
+ * restoring its drawing; one drawn as a stitch chart just stops being one.
+ */
+function chartKind(project) {
+  return segmented({
+    value: isStitchChart(project) ? 'stitches' : 'colors',
+    options: [
+      ['colors', 'Color chart', 'Drawn in colors. Knits as Fair Isle, Jacquard, Slip stitch or Mosaic, chosen on the knit screen.'],
+      ['stitches', 'Stitch chart', 'Drawn in knit, tuck and slip on the stitch layer. Knits as Tuck & slip.'],
+    ],
+    onchange: (kind) => {
+      if (kind === 'colors' && project.source) return backToColors();
+      commit(kind === 'stitches' ? 'stitch chart' : 'color chart', (p) => setChartKind(p, kind));
+      if (kind === 'stitches') setUI({ layer: 'stitches' });
+    },
+  });
+}
+
 function layerSection(project, technique) {
   const onStitches = state.layer === 'stitches';
   const out = [
@@ -179,19 +207,16 @@ function layerSection(project, technique) {
       h(
         'div',
         { class: 'row' },
-        h('span', { class: 'muted', title: `${technique.label} ignores the stitch layer. Tuck & slip knits it.` }, 'Not knitted'),
+        h('span', { class: 'muted', title: 'A color chart ignores the stitch layer. A stitch chart knits it, as Tuck & slip.' }, 'Not knitted'),
         h(
           'button',
           {
             type: 'button',
             class: 'link',
-            title: 'Switch the project to the Tuck & slip technique, which knits the stitch layer',
-            onclick: () =>
-              commit('technique', (p) => {
-                p.technique = 'texture';
-              }),
+            title: 'Make this a stitch chart, which knits the stitch layer',
+            onclick: () => commit('stitch chart', (p) => setChartKind(p, 'stitches')),
           },
-          'Use Tuck & slip'
+          'Make it a stitch chart'
         )
       )
     );

@@ -1783,7 +1783,12 @@ body.dragging-panel .panel-body { pointer-events: none; }
    minus sign. Before they are confirmed the card leads the panel in the
    accent, because a forgotten point cam ruins the first row. */
 .knit-bed.is-setup { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--bg-head)); }
-.knit-bed-head { display: flex; align-items: center; gap: 8px; }
+.knit-bed-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; }
+/* How the job knits leads the setup card, as large as the markers: a color
+   chart knitted the wrong way is as ruined as one on the wrong needles. */
+.select.knit-technique { height: 40px; font-size: 18px; font-weight: 600; }
+.knit-technique-fixed { font-size: 22px; font-weight: 650; line-height: 1.15; }
+.knit-bed.is-setup .knit-technique + .knit-row-label { margin-top: 10px; }
 .knit-bed-range { font-size: 26px; font-weight: 650; line-height: 1.15; font-variant-numeric: tabular-nums; }
 
 .knit-markers { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
@@ -1837,6 +1842,7 @@ body.dragging-panel .panel-body { pointer-events: none; }
 .knit-inline { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-dim); }
 .knit-inline .select { width: auto; }
 .btn.knit-confirm { height: 38px; font-size: 14px; }
+.btn.knit-change { height: 38px; padding: 0 16px; font-size: 14px; font-weight: 600; }
 
 .knit-log {
   max-height: 220px;

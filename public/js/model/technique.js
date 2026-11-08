@@ -117,6 +117,42 @@ export function getTechnique(id) {
 
 export const techniqueList = () => Object.values(TECHNIQUES);
 
+/**
+ * A design is one of two kinds, and they are different ways of designing,
+ * not two settings over one drawing. A color chart is drawn in colors and
+ * knits as any of the color techniques; which one is chosen on the knit
+ * screen, per session. A stitch chart is drawn knit, tuck and slip on the
+ * stitch layer and knits only as Tuck & slip.
+ *
+ * The project still names a color technique for a color chart: it is what
+ * the designer checks the chart and draws the preview by.
+ */
+export const colorTechniques = () => techniqueList().filter((t) => !t.stitches);
+export const isStitchChart = (project) => Boolean(getTechnique(project.technique).stitches);
+export const isColorTechnique = (id) => colorTechniques().some((t) => t.id === id);
+
+/** The color technique a color chart is checked as, or was before it became a stitch chart. */
+export function colorTechniqueOf(project) {
+  if (!isStitchChart(project)) return getTechnique(project.technique).id;
+  const kept = project.stitch?.colorTechnique;
+  return isColorTechnique(kept) ? kept : DEFAULT_TECHNIQUE;
+}
+
+/**
+ * Make the project a color chart or a stitch chart, in place (inside a
+ * commit). The color technique is kept in `stitch` while it is a stitch
+ * chart, so switching back checks it as it was.
+ */
+export function setChartKind(project, kind) {
+  if ((kind === 'stitches') === isStitchChart(project)) return;
+  if (kind === 'stitches') {
+    project.stitch = { ...project.stitch, colorTechnique: project.technique };
+    project.technique = 'texture';
+  } else {
+    project.technique = colorTechniqueOf(project);
+  }
+}
+
 /** The most colors a row may use under the project's technique. */
 export function colorsPerRow(project) {
   const id = getTechnique(project.technique).id;
