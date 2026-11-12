@@ -47,8 +47,15 @@ export const DIR_LEFT = 0x01;
 export const STRING_INFO = 0x00;
 export const STRING_ERROR = 0x01;
 
-/** The sketch's buffer is 25 bytes and its length field is one byte. */
-export const MAX_NEEDLES = 200;
+/**
+ * The row's length field is one byte. Firmware v3 buffers that many (32
+ * bytes); earlier sketches, upstream included, buffer 25 and refuse a row
+ * over 200 with "Pattern too long".
+ */
+export const MAX_NEEDLES = 255;
+export const LEGACY_MAX_NEEDLES = 200;
+/** The first firmware version that takes rows up to MAX_NEEDLES. */
+export const WIDE_ROW_FIRMWARE = 3;
 
 /**
  * Build a CMD_SET_ROW frame. `row` is one 0/1 per needle in the order the

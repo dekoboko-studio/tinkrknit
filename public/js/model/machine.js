@@ -15,8 +15,8 @@
  * fewer than the bed has (the knit screen checks the markers against it).
  */
 
-/** The silver-reed-write controller's row buffer (MAX_NEEDLES in knit/protocol.js). */
-const CONTROLLER_NEEDLES = 200;
+/** The controller's longest row (MAX_NEEDLES in knit/protocol.js; firmware v3). */
+const CONTROLLER_NEEDLES = 255;
 
 /**
  * A Silver Reed electronic bed on the same 8-pin DIN as the SK840. Soft Byte
@@ -65,7 +65,7 @@ export const MACHINES = {
   sk500: silverReed('sk500', 'Silver Reed SK500', 200, 4.5,
     'Standard gauge. Commercial interfaces need an SK500Ex adapter: it may not connect to this controller directly.'),
   sk830: silverReed('sk830', 'Silver Reed SK830 fine gauge', 250, 3.6,
-    'Fine gauge. The controller selects at most 200 needles, so keep the markers within 200.'),
+    'Fine gauge. Over 200 needles between the markers needs controller firmware v3.'),
   sk860: silverReed('sk860', 'Silver Reed SK860 mid gauge', 150, 6.5, 'Mid gauge.'),
   sk890: silverReed('sk890', 'Silver Reed SK890 bulky', 110, 9, 'Bulky.'),
   sa3e: silverReed('sa3e', 'Silver Reed SA-3E', 128, null, 'Gauge not confirmed.'),

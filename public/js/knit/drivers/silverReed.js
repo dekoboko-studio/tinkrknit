@@ -8,7 +8,10 @@
  * the SK840 has knitted from it.
  */
 
-import { createParser, encodeRow, encodeClear, encodeHello, encodePassInfo, PASS_YARN_CHANGE, PASS_CAM_CHANGE, PASS_DONE } from '../protocol.js';
+import {
+  createParser, encodeRow, encodeClear, encodeHello, encodePassInfo, PASS_YARN_CHANGE, PASS_CAM_CHANGE, PASS_DONE,
+  LEGACY_MAX_NEEDLES, WIDE_ROW_FIRMWARE,
+} from '../protocol.js';
 
 /** A second EXIT inside this window is the same pass reported twice. */
 const EXIT_DEBOUNCE_MS = 50;
@@ -112,6 +115,9 @@ export function createSilverReed(machine, { write, emit }) {
      * replaces it.
      */
     async send({ row, carriageSide, info }) {
+      if (row.length > LEGACY_MAX_NEEDLES && firmware < WIDE_ROW_FIRMWARE) {
+        throw new Error(`This row is ${row.length} needles; the controller's firmware takes at most ${LEGACY_MAX_NEEDLES}. Update it to v${WIDE_ROW_FIRMWARE} or later, or keep the markers within ${LEGACY_MAX_NEEDLES}.`);
+      }
       // Before the row, so the signal is up while the knitter still has hands free.
       lastInfo = info;
       if (firmware >= 1 && info) await write(passInfo(info));
