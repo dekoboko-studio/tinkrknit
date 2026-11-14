@@ -111,6 +111,10 @@ body {
   touch-action: none; /* the editor owns every pointer gesture */
   cursor: crosshair;
 }
+/* Space held or the Pan tool in hand; closed hand while dragging
+   (editor/canvas.js). */
+.grid-canvas.pan-ready { cursor: grab; }
+.grid-canvas.panning { cursor: grabbing; }
 
 /* --- tool options bar ----------------------------------------------------- */
 

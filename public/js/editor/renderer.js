@@ -305,6 +305,8 @@ export function createRenderer(canvas) {
   function drawHover(hover, vp, bm, state) {
     const cell = vp.cell;
     const tool = tools.get(state.tool);
+    // Space held means a drag pans, so there is nothing to aim.
+    if (state.spaceDown) return;
     // A tool with a footprint of its own (stamp, text) can be placed with the
     // cursor off the tile, so a motif can hang over an edge; the clip below
     // still hides the cursor once none of it would land.

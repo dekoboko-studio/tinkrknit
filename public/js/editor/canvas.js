@@ -10,7 +10,7 @@ import {
   state, beginStroke, endStroke, cancelStroke, touch, validation,
 } from '../core/store.js';
 import { tools } from '../core/registry.js';
-import { emit } from '../core/bus.js';
+import { emit, on } from '../core/bus.js';
 import * as bitmap from '../model/bitmap.js';
 import { createRenderer } from './renderer.js';
 import { createViewport, screenToCell, zoomAt, fit, pan } from './viewport.js';
@@ -86,15 +86,36 @@ export function createEditor(canvasEl) {
 
   // --- pointer handling -----------------------------------------------------
 
+  /**
+   * The cursor says when a drag will pan: an open hand while Space is held or
+   * the Pan tool is in hand, a closed one while panning (the middle button
+   * too). Otherwise pan-by-Space is invisible until you try it.
+   */
+  function updateCursor() {
+    canvasEl.classList.toggle('pan-ready', state.spaceDown || !!tools.get(state.tool)?.pan);
+    canvasEl.classList.toggle('panning', !!panning);
+  }
+  on('ui:changed', (patch) => {
+    if ('spaceDown' in patch || 'tool' in patch) {
+      updateCursor();
+      if ('spaceDown' in patch) draw(); // the hover outline hides while Space is held
+    }
+  });
+  updateCursor();
+
   canvasEl.addEventListener('contextmenu', (e) => e.preventDefault());
 
   canvasEl.addEventListener('pointerdown', (event) => {
     canvasEl.focus();
 
-    // Middle button, or space held, pans regardless of the active tool.
-    if (event.button === 1 || state.spaceDown) {
+    // Middle button, Space held, or the Pan tool's left button pans,
+    // regardless of the active tool.
+    const panTool = tools.get(state.tool)?.pan && event.button === 0;
+    if (event.button === 1 || state.spaceDown || panTool) {
+      event.preventDefault(); // a middle click would otherwise start autoscroll
       panning = { x: event.clientX, y: event.clientY };
       canvasEl.setPointerCapture(event.pointerId);
+      updateCursor();
       return;
     }
     if (event.button !== 0 && event.button !== 2) return;
@@ -152,6 +173,7 @@ export function createEditor(canvasEl) {
   function finishGesture(event) {
     if (panning) {
       panning = null;
+      updateCursor();
       return;
     }
     if (!gesture) return;

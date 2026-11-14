@@ -21,7 +21,7 @@ import { mdiPencilRuler } from '../../icons.js';
 export const TOOL_KEYS = {
   pencil: 'b', eraser: 'e', line: 'l', rect: 'r', ellipse: 'c',
   shape: 'g', text: 't', fill: 'f', replace: 'x', eyedropper: 'i',
-  select: 'm', shift: 'h', stamp: 's', gradient: 'd',
+  select: 'm', shift: 'h', stamp: 's', gradient: 'd', hand: 'v',
 };
 
 function build() {

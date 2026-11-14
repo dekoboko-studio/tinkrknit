@@ -32,6 +32,7 @@ import {
   mdiPencil, mdiEraser, mdiVectorLine, mdiVectorSquare, mdiVectorCircleVariant,
   mdiStarOutline, mdiFormatColorFill, mdiFindReplace, mdiEyedropperVariant,
   mdiSelectionDrag, mdiCursorMove, mdiStamper, mdiFormatText, mdiGradientVertical,
+  mdiHandBackRight,
 } from '../icons.js';
 import * as bitmap from '../model/bitmap.js';
 import { linePoints, dilate } from './shapes.js';
@@ -449,9 +450,27 @@ export function nudgeStamp(dx, dy, { undo, place }) {
   return true;
 }
 
+/**
+ * Pan with the left button, for anyone without a middle button or a free
+ * hand for Space: a pen, a touch screen, a one-handed trackpad. `pan: true`
+ * hands the drag to the canvas's own panning (editor/canvas.js), the same
+ * path as the middle button, so the tool itself paints nothing. The empty
+ * footprint hides the cell outline: there is nothing to aim.
+ */
+const hand = {
+  id: 'hand',
+  label: 'Pan',
+  icon: mdiHandBackRight,
+  order: 120,
+  pan: true,
+  noHistory: true,
+  hint: 'Drag to move around the grid. Space + drag or the middle button pans with any tool.',
+  footprint: () => [],
+};
+
 export const BUILTIN_TOOLS = [
   pencil, eraser, line, rectangle, ellipse, shape, text,
-  fill, gradient, replace, eyedropper, select, shift, stamp,
+  fill, gradient, replace, eyedropper, select, shift, stamp, hand,
 ];
 
 export function registerBuiltinTools() {
